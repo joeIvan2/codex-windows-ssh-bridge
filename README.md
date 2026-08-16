@@ -27,9 +27,21 @@ flowchart LR
 
 The desktop app reads concrete SSH aliases from `~/.ssh/config`, resolves them with OpenSSH, and starts the remote Codex app server through the remote user's login shell. `codex` must therefore be on that shell's `PATH`.
 
+### Account and profile boundary
+
+A reachable SSH host is not enough: the alias's `User` chooses the remote Windows account and therefore its profile, projects, Codex CLI installation, and local authentication state. Treat these as one deliberate mapping:
+
+| Item | Must identify | Why it matters |
+| --- | --- | --- |
+| SSH alias | One host **and** one `User` | A previously working alias can still log in as the wrong Windows account. |
+| Target Windows profile | The account that owns the intended desktop/Codex project | `%USERPROFILE%`, `%LOCALAPPDATA%`, project files, and Codex state are profile-specific. |
+| Recovery access | A separate, tested alias/key | Keep it intact while adding or changing a profile-specific Codex connection. |
+
+If the work must run in a particular signed-in Windows desktop profile, select that account first. Do not repoint an existing host alias merely because it reaches the same machine; create a new, clearly named alias for the intended profile and keep the old recovery alias until the new one passes preflight.
+
 ## Status and verification boundary
 
-**Last reviewed:** 2026-08-16. This guide is based on one community reproduction, not a compatibility guarantee. The optional reference bridge source is experimental and has only local build/self-test coverage in this repository; validate it on an isolated host before relying on it.
+**Last reviewed:** 2026-08-17. This guide is based on community reproductions, not a compatibility guarantee. The optional reference bridge source is experimental and has only local build/self-test coverage in this repository; validate it on an isolated host before relying on it.
 
 | Component | Community reference baseline |
 | --- | --- |
@@ -51,8 +63,9 @@ OpenAI documents generic SSH-host remote projects: concrete aliases, a usable re
 ### Remote Windows host
 
 - Windows OpenSSH Server, reachable only over LAN, VPN, or a mesh network.
+- A known target Windows user profile. If the project must share a particular desktop profile, that exact account must be used by the SSH alias.
 - A dedicated, least-privilege Windows user.
-- Codex CLI installed and authenticated for that remote user.
+- Codex CLI installed and authenticated for that exact remote user/profile.
 - A login shell where `codex --version` succeeds.
 - A remote project folder.
 
@@ -60,7 +73,13 @@ OpenAI documents generic SSH-host remote projects: concrete aliases, a usable re
 
 ## Quick setup
 
-### 1. Create a dedicated SSH key locally
+### 1. Choose the target remote Windows profile
+
+Before generating a key or changing an existing SSH alias, write down the intended remote Windows account, project folder, and whether it is the account currently signed in at the target desktop. A host nickname such as `<old-host-alias>` is not an account selection.
+
+If an older alias already reaches the host, treat it as recovery access only until you prove which account it uses. Do not copy a Codex auth file, a private key, or a profile directory from that old account to the new one.
+
+### 2. Create a dedicated SSH key locally
 
 In local PowerShell:
 
@@ -72,13 +91,15 @@ ssh-keygen -t ed25519 `
 
 Keep `id_ed25519_codex_win` private. Install only `id_ed25519_codex_win.pub` on the remote host.
 
-### 2. Install the public key on the remote host
+### 3. Install the public key on the remote host
 
 Using an existing secure administrative route, add the public-key line to:
 
 ```text
 C:\Users\<remote-user>\.ssh\authorized_keys
 ```
+
+On Windows, confirm the target account's *effective* `AuthorizedKeysFile` locally before editing: an OpenSSH administrator match rule can select a different file. An administrator can inspect it with `sshd -T -C user=<target-desktop-account>,host=localhost,addr=127.0.0.1`; keep that output private. Do not assume another account's key path is correct.
 
 Use restrictive ownership and ACLs on `.ssh` and `authorized_keys`. Prefer a non-administrator account dedicated to this purpose. Test the key in a second session before changing server authentication policy.
 
@@ -90,14 +111,14 @@ PasswordAuthentication no
 KbdInteractiveAuthentication no
 ```
 
-### 3. Add a concrete SSH alias locally
+### 4. Add a concrete SSH alias locally
 
 Create or update `%USERPROFILE%\.ssh\config`:
 
 ```sshconfig
-Host codex-win
+Host codex-win-target
     HostName <host-name-or-private-address>
-    User <remote-user>
+    User <target-desktop-account>
     IdentityFile ~/.ssh/id_ed25519_codex_win
     IdentitiesOnly yes
     PreferredAuthentications publickey
@@ -105,14 +126,18 @@ Host codex-win
     KbdInteractiveAuthentication no
 ```
 
-Use a literal alias such as `codex-win`; pattern-only `Host` entries are not discoverable by Codex.
+Use a literal, profile-specific alias such as `codex-win-target`; pattern-only `Host` entries are not discoverable by Codex. Do not overwrite an existing alias that may intentionally use another Windows account.
 
-### 4. Verify before using the desktop app
+### 5. Verify the target profile before using the desktop app
 
 ```powershell
-ssh -o BatchMode=yes codex-win "codex --version"
-ssh -G codex-win
+$alias = 'codex-win-target'
+ssh -G $alias
+ssh -T -o BatchMode=yes $alias "whoami"
+ssh -T -o BatchMode=yes $alias "codex --version"
 ```
+
+Confirm that `whoami` is the intended Windows account, not merely an account that can reach the same host. If it is wrong, stop and create a new profile-specific alias/key; do not reuse the old account's Codex files or tokens.
 
 On the remote login shell, also check:
 
@@ -122,12 +147,12 @@ codex --version
 printf 'SHELL=%s\n' "$SHELL"
 ```
 
-Then run the [manual preflight](docs/preflight.md). A successful `codex --version` alone can be a false positive on Windows: it does not prove that Codex's multiline POSIX bootstrap and clean stdio proxy will work.
+Then run the [manual preflight](docs/preflight.md). A successful `codex --version` alone can be a false positive on Windows: it does not prove that Codex's multiline POSIX bootstrap, the intended profile's `$SHELL`, and a clean stdio proxy will work.
 
-### 5. Add the remote project in the desktop app
+### 6. Add the remote project in the desktop app
 
 1. Open **Settings → Connections → SSH**.
-2. Add or enable `codex-win`.
+2. Add or enable `codex-win-target`.
 3. Choose the remote project folder.
 4. Start a chat in that remote project.
 
@@ -137,15 +162,17 @@ Commands, files, tools, credentials, and approvals belong to the remote host and
 
 | Symptom | Likely meaning | Safe check |
 | --- | --- | --- |
-| `Permission denied (publickey)` | Key, account, or ACL problem | `ssh -vvv codex-win` |
-| The host is absent from the app | Alias is not concrete or config cannot be resolved | `ssh -G codex-win` |
+| `Permission denied (publickey)` | Key, account, or ACL problem | `ssh -vvv <alias>` |
+| The host is absent from the app | Alias is not concrete or config cannot be resolved | `ssh -G <alias>` |
+| Authentication succeeds but the expected project, Codex state, or desktop profile is missing | The alias selected a different Windows account | Compare `ssh -G <alias>` with `ssh -T <alias> "whoami"`; create a new alias for the intended profile and retain the old recovery alias |
 | Authenticated, then `codex: command not found` | Login-shell `PATH` is incomplete | `command -v codex` on the remote shell |
-| `unexpected EOF` or quote errors after authentication | Windows SSH may be passing a POSIX bootstrap through an incompatible command interpreter | Validate the configured login shell; use a reviewed bridge only as an advanced workaround |
+| `unexpected EOF` or quote errors after authentication | Windows SSH may be passing a POSIX bootstrap through an incompatible command interpreter | Validate the configured login shell and target profile; use a reviewed bridge only as an advanced workaround |
+| `codex --version` passes, but Desktop still fails or reports shell noise | `$SHELL` can still point to an incompatible command interpreter, or an interactive shell can emit non-protocol bytes | Run the optional inner-shell probe in the [manual preflight](docs/preflight.md); use a reviewed bridge only if the account-specific path needs it |
 | `socket hangup` | Network/sleep/app state, CLI-version drift, noisy shell output, or a stale control process/socket can all contribute | Check reachability, host sleep, Desktop and CLI versions, then sanitized metadata-only logs; never delete a socket owned by a live process |
 
 ### Advanced Windows shell workaround
 
-Some Windows OpenSSH installations default to `cmd.exe`, which can corrupt multi-line POSIX shell bootstrap commands. The preferred fix is an administrator-reviewed POSIX-compatible default login shell with a correct `PATH`.
+Some Windows OpenSSH installations default to `cmd.exe`, which can corrupt multi-line POSIX shell bootstrap commands. The preferred fix is an administrator-reviewed POSIX-compatible default login shell with a correct `PATH`. Verify it under the selected target profile: changing the server shell alone may not correct a stale `$SHELL` environment variable or interactive-shell diagnostics.
 
 If that is impossible, use a **separate key reserved for the bridge** and a reviewed native bridge that preserves SSH stdin/stdout/stderr unchanged. This does **not** make the key Codex-confined: a bridge that accepts arbitrary `SSH_ORIGINAL_COMMAND` can still execute commands as the remote Windows user if the key is compromised. Keep an unforced recovery key, do not log raw protocol streams, and treat the bridge as an advanced deployment artifact—not a universal copy-paste fix.
 
@@ -157,6 +184,7 @@ Read the [bridge boundary and threat model](docs/security-model.md) before deplo
 
 - [ ] The private key stays on the local computer.
 - [ ] The repository, SSH config, and logs contain no passwords, private keys, tokens, real hostnames, or IP addresses.
+- [ ] Each Codex alias maps to the intended Windows account/profile; a previously working host alias is retained as recovery access until the new profile passes preflight.
 - [ ] The remote account is least privilege and separate from an administrator account.
 - [ ] NTFS ACLs limit that remote account to the intended project data; Codex auth/token files are never copied between hosts.
 - [ ] The SSH host-key fingerprint is verified out of band on first connection; never use `StrictHostKeyChecking=no`.

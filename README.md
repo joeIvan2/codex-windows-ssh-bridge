@@ -4,7 +4,7 @@
 
 [繁體中文](README.zh-TW.md)
 
-> **Scope:** This is community documentation, not an official OpenAI project. It covers SSH remote projects on Windows hosts. It does not control a Windows desktop or bypass normal Windows authorization.
+> **Scope:** This is community documentation, not an official OpenAI project. It is a Windows reference for SSH remote projects—not a universal solution for every non-Linux host. It does not control a Windows desktop or bypass normal Windows authorization.
 
 ## What this is—and is not
 
@@ -26,6 +26,19 @@ flowchart LR
 ```
 
 The desktop app reads concrete SSH aliases from `~/.ssh/config`, resolves them with OpenSSH, and starts the remote Codex app server through the remote user's login shell. `codex` must therefore be on that shell's `PATH`.
+
+## Status and verification boundary
+
+**Last reviewed:** 2026-08-16. This guide is based on one community reproduction, not a compatibility guarantee. The optional reference bridge source is experimental and has only local build/self-test coverage in this repository; validate it on an isolated host before relying on it.
+
+| Component | Community reference baseline |
+| --- | --- |
+| ChatGPT desktop app package | `26.810.7004.0` |
+| Remote Codex CLI | `0.147.0` |
+| Windows OpenSSH server banner | `9.5p2` |
+| Git Bash | `5.3.15` |
+
+OpenAI documents generic SSH-host remote projects: concrete aliases, a usable remote login shell, and `codex` on that shell's `PATH`. It does **not** prescribe Git Bash or endorse a particular Windows bridge. Treat all Windows shell-bridge guidance here as community-tested, advanced troubleshooting.
 
 ## Prerequisites
 
@@ -109,6 +122,8 @@ codex --version
 printf 'SHELL=%s\n' "$SHELL"
 ```
 
+Then run the [manual preflight](docs/preflight.md). A successful `codex --version` alone can be a false positive on Windows: it does not prove that Codex's multiline POSIX bootstrap and clean stdio proxy will work.
+
 ### 5. Add the remote project in the desktop app
 
 1. Open **Settings → Connections → SSH**.
@@ -126,25 +141,30 @@ Commands, files, tools, credentials, and approvals belong to the remote host and
 | The host is absent from the app | Alias is not concrete or config cannot be resolved | `ssh -G codex-win` |
 | Authenticated, then `codex: command not found` | Login-shell `PATH` is incomplete | `command -v codex` on the remote shell |
 | `unexpected EOF` or quote errors after authentication | Windows SSH may be passing a POSIX bootstrap through an incompatible command interpreter | Validate the configured login shell; use a reviewed bridge only as an advanced workaround |
-| `socket hangup` | The proxy stream is polluted or a stale app-server control process/socket remains | Preserve metadata-only logs, stop only verified stale Codex processes, then reconnect |
+| `socket hangup` | Network/sleep/app state, CLI-version drift, noisy shell output, or a stale control process/socket can all contribute | Check reachability, host sleep, Desktop and CLI versions, then sanitized metadata-only logs; never delete a socket owned by a live process |
 
 ### Advanced Windows shell workaround
 
 Some Windows OpenSSH installations default to `cmd.exe`, which can corrupt multi-line POSIX shell bootstrap commands. The preferred fix is an administrator-reviewed POSIX-compatible default login shell with a correct `PATH`.
 
-If that is impossible, use a **separate Codex-only key** and a reviewed native bridge that preserves SSH stdin/stdout/stderr unchanged. Keep an unforced recovery key, do not log raw protocol streams, and treat the bridge as an advanced deployment artifact—not a universal copy-paste fix.
+If that is impossible, use a **separate key reserved for the bridge** and a reviewed native bridge that preserves SSH stdin/stdout/stderr unchanged. This does **not** make the key Codex-confined: a bridge that accepts arbitrary `SSH_ORIGINAL_COMMAND` can still execute commands as the remote Windows user if the key is compromised. Keep an unforced recovery key, do not log raw protocol streams, and treat the bridge as an advanced deployment artifact—not a universal copy-paste fix.
 
 The official OpenAI documentation describes SSH-host remote projects, but does not prescribe Git Bash or a particular Windows forced-command bridge.
+
+Read the [bridge boundary and threat model](docs/security-model.md) before deploying an advanced bridge. This repository also includes a source-only, no-password [reference bridge](docs/reference-bridge.md); it ships no prebuilt executable and never changes SSH settings automatically.
 
 ## Security checklist
 
 - [ ] The private key stays on the local computer.
 - [ ] The repository, SSH config, and logs contain no passwords, private keys, tokens, real hostnames, or IP addresses.
 - [ ] The remote account is least privilege and separate from an administrator account.
-- [ ] SSH access is limited to LAN, VPN, or mesh networking.
+- [ ] NTFS ACLs limit that remote account to the intended project data; Codex auth/token files are never copied between hosts.
+- [ ] The SSH host-key fingerprint is verified out of band on first connection; never use `StrictHostKeyChecking=no`.
+- [ ] SSH access is limited to LAN, VPN, or mesh networking, and Windows Firewall allows TCP/22 only from the intended private peers. Do not disable the firewall broadly.
 - [ ] Codex app-server is never exposed directly on a public or shared network.
 - [ ] Logs contain timestamps, exit codes, and source labels only—not raw protocol data or secrets.
 - [ ] A normal recovery SSH key/path is tested before any forced-command bridge is enabled.
+- [ ] Every key has an owner, an expiry/rotation plan, and a documented revocation step in `authorized_keys`.
 
 ## References
 

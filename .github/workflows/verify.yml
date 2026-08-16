@@ -1,0 +1,17 @@
+name: Verify reference material
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  reference-bridge:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and self-test the reference bridge
+        shell: pwsh
+        run: ./tests/Test-ReferenceBridge.ps1

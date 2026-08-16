@@ -1,0 +1,7 @@
+# This file must live beside both compiled .exe files.
+# Use an absolute Windows path to a POSIX-compatible Bash executable.
+bash_path=C:\Program Files\Git\bin\bash.exe
+
+# POSIX representation of codex-ssh-login-shell.exe in the install directory.
+# The normal Git Bash mapping for C:\ProgramData\CodexSshBridge is shown here.
+shell_posix_path=/c/ProgramData/CodexSshBridge/codex-ssh-login-shell.exe

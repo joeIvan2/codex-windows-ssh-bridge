@@ -1,6 +1,8 @@
 # Credentials and SSH material
 .ssh/
+.codex/
 id_*
+*.pub
 *.key
 *.pem
 *.ppk
@@ -25,6 +27,8 @@ captures/
 # Generated binaries and local IDE files
 bin/
 obj/
+artifacts/
+bridge.ini
 *.exe
 *.dll
 .vs/

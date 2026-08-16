@@ -20,6 +20,19 @@ alias and a remote login shell where `codex` is on `PATH`, but it does not
 prescribe Git Bash or this bridge. Prefer an administrator-reviewed
 POSIX-compatible default login shell when that is practical.
 
+## Choose the Windows account before deploying
+
+The bridge does not choose, attach to, or control a visible Windows desktop session. It runs as the Windows account selected by the SSH alias's `User` and by the matching public key. That account owns its own profile, `%LOCALAPPDATA%`, Codex CLI/authentication state, project files, and bridge temporary-script location.
+
+Before building or deploying the bridge for a desktop workflow:
+
+1. On the intended Windows desktop, run `whoami` privately.
+2. Create a **new, concrete alias** and dedicated key for exactly that account; do not repoint a previously working alias for another profile.
+3. Verify `ssh -T -o BatchMode=yes <new-alias> "whoami"` matches the desktop result, then install/authenticate Codex under that same account and run the full [manual preflight](preflight.md).
+4. Keep the old alias/key as recovery access until the new profile completes a real read-only remote-project task.
+
+`bridge.ini` selects a shell executable; it cannot switch Windows accounts. Likewise, a Windows OpenSSH `DefaultShell` setting is host-wide and does not choose a user profile. If the target account differs from an existing bridge account, configure and validate a separate profile-specific connection instead of copying Codex files or credentials.
+
 ## Security boundary
 
 This bridge does **not** reduce the Windows account's permissions. A dedicated
@@ -92,6 +105,8 @@ the deployment manually:
 5. Confirm the configured `bash.exe` exists at a local, non-UNC path. Run each
    executable's `--self-test`, then run the [manual SSH preflight](preflight.md).
 
+Before editing any key file, verify the effective `AuthorizedKeysFile` for the target account with an administrator-reviewed local `sshd -T -C ...` check. Windows OpenSSH can apply a different path through an administrator match rule; do not assume every account uses `%USERPROFILE%\\.ssh\\authorized_keys`, and do not publish the resulting paths or output.
+
 The self-test checks selected source behaviors; it does not load `bridge.ini` or
 prove Git Bash, SSH transport, or ChatGPT desktop compatibility. Do not edit
 `authorized_keys`, `sshd_config`, firewall rules, or password authentication
@@ -100,8 +115,8 @@ until the recovery path and full preflight have succeeded.
 ## Add only a dedicated bridge key
 
 Keep the recovery key session open. In a separate administrative session, add
-a **new** public-key line to the remote user's `authorized_keys`, prefixing only
-that new line with:
+a **new** public-key line to the selected target account's effective
+`authorized_keys`, prefixing only that new line with:
 
 ```text
 command="C:/ProgramData/CodexSshBridge/codex-ssh-bridge.exe"

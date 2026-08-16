@@ -17,6 +17,19 @@ OpenAI 文件說明通用的 SSH 遠端專案：需要具體 SSH alias，以及�
 找到 `codex` 的遠端登入 shell；它沒有指定 Git Bash 或這個 bridge。若可行，
 仍優先請管理員設定經審核的 POSIX 相容預設登入 shell。
 
+## 部署前先選定 Windows 帳號
+
+bridge 不會選擇、附著或控制可見的 Windows 桌面工作階段。它會以 SSH alias 的 `User` 與配對 public key 所選出的 Windows 帳號執行。該帳號各自擁有 profile、`%LOCALAPPDATA%`、Codex CLI／授權狀態、專案檔與 bridge 暫存 script 位置。
+
+要為桌面 workflow 建置或部署 bridge 前：
+
+1. 在預期 Windows 桌面上私下執行 `whoami`。
+2. 為**完全相同的帳號**建立新的、具體的 alias 與專用 key；不可把原本可用於另一個 profile 的 alias 直接改指向它。
+3. 驗證 `ssh -T -o BatchMode=yes <new-alias> "whoami"` 與桌面結果一致，再在同一帳號下安裝／授權 Codex，並完成[手動 preflight](preflight.zh-TW.md)。
+4. 新 profile 完成實際的小型唯讀遠端專案任務前，保留舊 alias／key 作為復原連線。
+
+`bridge.ini` 只選擇 shell executable，不能切換 Windows 帳號。Windows OpenSSH 的 `DefaultShell` 同樣是主機層級設定，不能選擇 user profile。若目標帳號不同於既有 bridge 帳號，應設定並驗證另一條 profile 專用連線，而不是複製 Codex 檔案或認證資料。
+
 ## 安全邊界
 
 這個 bridge **不會**降低 Windows 帳號本身的權限。可抵達接受
@@ -83,14 +96,16 @@ Windows 內附的 .NET Framework C# compiler；不需要 NuGet、密碼、金鑰
 5. 確認設定的 `bash.exe` 是存在的本機非 UNC path。對兩個執行檔執行
    `--self-test`，再執行[手動 SSH preflight](preflight.zh-TW.md)。
 
+編輯任何 key file 前，先由管理員在本機以 `sshd -T -C ...` 核對目標帳號實際套用的 `AuthorizedKeysFile`。Windows OpenSSH 可能因 administrator match rule 而使用不同路徑；不可假設每個帳號都使用 `%USERPROFILE%\\.ssh\\authorized_keys`，也不可公開產生的 path 或 output。
+
 self-test 只檢查部分原始碼行為；它不會載入 `bridge.ini`，也不證明 Git Bash、
 SSH transport 或 ChatGPT Desktop 相容。recovery path 與完整 preflight 成功前，
 不可修改 `authorized_keys`、`sshd_config`、Firewall 規則或密碼驗證。
 
 ## 只加入專用的 bridge key
 
-保持 recovery key 的連線工作階段開啟。在另一個已提高權限的工作階段，於遠端使用者
-的 `authorized_keys` 新增**一行新的** public key，僅在這個新行前加上：
+保持 recovery key 的連線工作階段開啟。在另一個已提高權限的工作階段，於選定目標帳號實際套用的
+`authorized_keys` 新增**一行新的** public key，僅在這個新行前加上：
 
 ```text
 command="C:/ProgramData/CodexSshBridge/codex-ssh-bridge.exe"

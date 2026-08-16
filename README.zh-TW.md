@@ -27,9 +27,21 @@ flowchart LR
 
 Desktop 會從 `~/.ssh/config` 讀取具體 SSH alias、以 OpenSSH 解析，並透過遠端使用者的登入 shell 啟動 remote Codex app-server。因此 `codex` 必須能在該登入 shell 的 `PATH` 找到。
 
+### 帳號與使用者設定檔邊界
+
+SSH 主機可連線還不夠：alias 裡的 `User` 決定遠端 Windows 帳號，也就決定其使用者設定檔、專案、Codex CLI 安裝位置與本機授權狀態。請把下列項目視為同一個明確對應：
+
+| 項目 | 必須先確認 | 為何重要 |
+| --- | --- | --- |
+| SSH alias | 一台主機**與**一個 `User` | 原本可用的 alias 仍可能登入錯的 Windows 帳號。 |
+| 目標 Windows 使用者設定檔 | 擁有預期桌面／Codex 專案的帳號 | `%USERPROFILE%`、`%LOCALAPPDATA%`、專案檔與 Codex 狀態都屬於各自的 profile。 |
+| 復原連線 | 另一組已驗證的 alias／key | 新增或改用特定 profile 的 Codex 連線時，保留它。 |
+
+若工作必須在特定已登入的 Windows 桌面 profile 中執行，先選定那個帳號。不要只因為既有 alias 能連到同一台主機就直接改它；應為目標 profile 建立名稱清楚的新 alias，並在它通過 preflight 前保留舊 alias 作為復原路徑。
+
 ## 支援狀態與驗證邊界
 
-**最後檢視：** 2026-08-16。本文件源自一套社群實作環境，不是相容性保證。選用的 reference bridge 原始碼仍是實驗性質；本 repo 目前只有本機 build/self-test 覆蓋，部署前務必先在隔離主機驗證。
+**最後檢視：** 2026-08-17。本文件源自社群實作環境，不是相容性保證。選用的 reference bridge 原始碼仍是實驗性質；本 repo 目前只有本機 build/self-test 覆蓋，部署前務必先在隔離主機驗證。
 
 | 元件 | 社群參考基線 |
 | --- | --- |
@@ -51,8 +63,9 @@ OpenAI 文件說明的是通用 SSH 遠端專案：具體 alias、可用的遠�
 ### 遠端 Windows 主機
 
 - 正在執行 Windows OpenSSH Server，且只能由 LAN、VPN 或 mesh network 到達。
+- 一個已確認的目標 Windows 使用者設定檔；若專案要與特定桌面 profile 共用，SSH alias 必須使用該帳號。
 - 一個低權限的專用 Windows 帳號。
-- 已在該遠端帳號下安裝並完成授權的 Codex CLI。
+- 已在該**正確遠端帳號／profile**下安裝並完成授權的 Codex CLI。
 - 一個能成功執行 `codex --version` 的登入 shell。
 - 遠端專案資料夾。
 
@@ -60,7 +73,13 @@ OpenAI 文件說明的是通用 SSH 遠端專案：具體 alias、可用的遠�
 
 ## 快速設定
 
-### 1. 在本機建立專用 SSH 金鑰
+### 1. 先選擇目標遠端 Windows profile
+
+建立金鑰或修改既有 SSH alias 前，先寫下預期的遠端 Windows 帳號、專案資料夾，以及它是否就是目標電腦目前登入桌面的帳號。像 `<old-host-alias>` 這類主機暱稱不是帳號選擇。
+
+若舊 alias 已能連到主機，在確認它登入哪個帳號之前，只把它當成復原連線。不要從舊帳號複製 Codex auth、私鑰或整個 profile 到新帳號。
+
+### 2. 在本機建立專用 SSH 金鑰
 
 在本機 PowerShell 執行：
 
@@ -72,13 +91,15 @@ ssh-keygen -t ed25519 `
 
 `id_ed25519_codex_win` 是私鑰，僅留在本機。遠端只能安裝 `id_ed25519_codex_win.pub`。
 
-### 2. 在遠端安裝公開金鑰
+### 3. 在遠端安裝公開金鑰
 
 透過既有且安全的管理管道，將公開金鑰的完整單行內容加入：
 
 ```text
 C:\Users\<remote-user>\.ssh\authorized_keys
 ```
+
+在 Windows 上編輯前，先在本機確認目標帳號**實際套用的** `AuthorizedKeysFile`：OpenSSH 的 administrator match rule 可能選用不同檔案。管理員可用 `sshd -T -C user=<target-desktop-account>,host=localhost,addr=127.0.0.1` 查核；輸出請自行保留。不可假設另一個帳號的 key path 也正確。
 
 `.ssh` 與 `authorized_keys` 要有嚴格的擁有者與 ACL。建議使用專用的一般帳號，不要使用管理員帳號。改動 server 驗證規則前，務必先以另一個工作階段驗證金鑰連線。
 
@@ -90,14 +111,14 @@ PasswordAuthentication no
 KbdInteractiveAuthentication no
 ```
 
-### 3. 在本機建立具體 SSH alias
+### 4. 在本機建立具體 SSH alias
 
 建立或修改 `%USERPROFILE%\.ssh\config`：
 
 ```sshconfig
-Host codex-win
+Host codex-win-target
     HostName <host-name-or-private-address>
-    User <remote-user>
+    User <target-desktop-account>
     IdentityFile ~/.ssh/id_ed25519_codex_win
     IdentitiesOnly yes
     PreferredAuthentications publickey
@@ -105,14 +126,18 @@ Host codex-win
     KbdInteractiveAuthentication no
 ```
 
-請使用像 `codex-win` 這樣具體的 alias；只有 pattern 的 `Host` 項目不會被 Codex 自動發現。
+請使用像 `codex-win-target` 這樣具體、且能辨識 profile 的 alias；只有 pattern 的 `Host` 項目不會被 Codex 自動發現。不要覆寫可能刻意使用另一個 Windows 帳號的既有 alias。
 
-### 4. 在開啟 Desktop 前驗證
+### 5. 在開啟 Desktop 前驗證目標 profile
 
 ```powershell
-ssh -o BatchMode=yes codex-win "codex --version"
-ssh -G codex-win
+$alias = 'codex-win-target'
+ssh -G $alias
+ssh -T -o BatchMode=yes $alias "whoami"
+ssh -T -o BatchMode=yes $alias "codex --version"
 ```
+
+確認 `whoami` 顯示的是預期 Windows 帳號，而不是只要能登入同一台主機的另一個帳號。若不正確，請停止並建立新的 profile 專用 alias／key；不要重用舊帳號的 Codex 檔案或 token。
 
 登入遠端 shell 後，也應確認：
 
@@ -122,12 +147,12 @@ codex --version
 printf 'SHELL=%s\n' "$SHELL"
 ```
 
-接著執行[手動 preflight](docs/preflight.zh-TW.md)。單靠 `codex --version` 成功可能是 Windows 的假陽性：它不能證明 Codex 的多行 POSIX bootstrap 與乾淨的 stdio proxy 能正常運作。
+接著執行[手動 preflight](docs/preflight.zh-TW.md)。單靠 `codex --version` 成功可能是 Windows 的假陽性：它不能證明 Codex 的多行 POSIX bootstrap、目標 profile 的 `$SHELL` 與乾淨的 stdio proxy 能正常運作。
 
-### 5. 在 Desktop 加入遠端專案
+### 6. 在 Desktop 加入遠端專案
 
 1. 開啟 **Settings → Connections → SSH**。
-2. 新增或啟用 `codex-win`。
+2. 新增或啟用 `codex-win-target`。
 3. 選擇遠端專案資料夾。
 4. 在該遠端專案中開始對話。
 
@@ -137,15 +162,17 @@ printf 'SHELL=%s\n' "$SHELL"
 
 | 現象 | 最可能意義 | 安全檢查方式 |
 | --- | --- | --- |
-| `Permission denied (publickey)` | 金鑰、帳號或 ACL 有問題 | `ssh -vvv codex-win` |
-| Desktop 看不到主機 | alias 不具體，或設定無法解析 | `ssh -G codex-win` |
+| `Permission denied (publickey)` | 金鑰、帳號或 ACL 有問題 | `ssh -vvv <alias>` |
+| Desktop 看不到主機 | alias 不具體，或設定無法解析 | `ssh -G <alias>` |
+| 已驗證成功，但看不到預期的專案、Codex 狀態或桌面 profile | alias 選到了另一個 Windows 帳號 | 比對 `ssh -G <alias>` 與 `ssh -T <alias> "whoami"`；為目標 profile 建立新 alias，並保留舊 alias 作為復原連線 |
 | 已驗證但出現 `codex: command not found` | 登入 shell 的 `PATH` 不完整 | 在遠端 shell 執行 `command -v codex` |
-| 驗證後出現 `unexpected EOF` 或引號錯誤 | Windows SSH 可能將 POSIX bootstrap 交給不相容的命令直譯器 | 檢查登入 shell；bridge 只應作為進階且經檢視的 workaround |
+| 驗證後出現 `unexpected EOF` 或引號錯誤 | Windows SSH 可能將 POSIX bootstrap 交給不相容的命令直譯器 | 檢查登入 shell 與目標 profile；bridge 只應作為進階且經檢視的 workaround |
+| `codex --version` 已通過，但 Desktop 仍失敗或出現 shell 雜訊 | `$SHELL` 仍可能指向不相容的命令直譯器，或互動 shell 輸出非協定位元組 | 執行[手動 preflight](docs/preflight.zh-TW.md)中的選用內層 shell probe；只有特定帳號路徑確實需要時才使用經檢視的 bridge |
 | `socket hangup` | 網路、休眠、Desktop／CLI 版本差異、shell 雜訊或殘留 control process/socket 都可能造成 | 先檢查連線、主機休眠、Desktop 與 CLI 版本，再看去識別化 metadata；不可刪除仍被活程序使用的 socket |
 
 ### 進階：Windows shell bridge
 
-有些 Windows OpenSSH 安裝會預設使用 `cmd.exe`，它可能破壞多行 POSIX bootstrap 指令。首選方案是讓管理員設定一個受審核、POSIX 相容且 `PATH` 正確的預設登入 shell。
+有些 Windows OpenSSH 安裝會預設使用 `cmd.exe`，它可能破壞多行 POSIX bootstrap 指令。首選方案是讓管理員設定一個受審核、POSIX 相容且 `PATH` 正確的預設登入 shell。必須在選定的目標 profile 下驗證：只改 server shell 未必能修正殘留的 `$SHELL` 環境變數或互動 shell 診斷訊息。
 
 若無法這麼做，請使用**專門保留給 bridge 的獨立 key**與經檢視的 native bridge。它必須原樣傳遞 SSH 的 stdin/stdout/stderr；但這不代表 key 被限制為只能操作 Codex：若 bridge 接受任意 `SSH_ORIGINAL_COMMAND`，key 遭竊時仍可能以遠端 Windows 使用者身分執行指令。保留未 forced 的復原 key；不可記錄原始 protocol stream。bridge 應被視為進階部署工件，不是通用的複製貼上解法。
 
@@ -157,6 +184,7 @@ printf 'SHELL=%s\n' "$SHELL"
 
 - [ ] 私鑰只保留在本機。
 - [ ] Repo、SSH config 與 log 沒有密碼、私鑰、Token、真實主機名稱或 IP。
+- [ ] 每個 Codex alias 都對應到預期 Windows 帳號／profile；新 profile 通過 preflight 前，原本可用的主機 alias 仍保留作為復原連線。
 - [ ] 遠端帳號是低權限帳號，並與管理員帳號分開。
 - [ ] NTFS ACL 將遠端帳號限制在預期的專案資料；不可在主機之間複製 Codex auth/token 檔案。
 - [ ] 首次連線以獨立管道核對 SSH host-key fingerprint；絕不可設定 `StrictHostKeyChecking=no`。

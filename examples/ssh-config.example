@@ -1,0 +1,11 @@
+# Save this as an entry in ~/.ssh/config (Windows: %USERPROFILE%\.ssh\config).
+# Replace every <...> value locally. Never commit real host details or key paths.
+
+Host codex-win
+    HostName <host-name-or-private-address>
+    User <remote-user>
+    IdentityFile ~/.ssh/id_ed25519_codex_win
+    IdentitiesOnly yes
+    PreferredAuthentications publickey
+    PasswordAuthentication no
+    KbdInteractiveAuthentication no

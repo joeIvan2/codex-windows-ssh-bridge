@@ -1,0 +1,31 @@
+# Credentials and SSH material
+.ssh/
+id_*
+*.key
+*.pem
+*.ppk
+*.pfx
+authorized_keys*
+known_hosts*
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.token
+*.secret
+
+# Connection diagnostics and protocol captures
+*.log
+ssh-logs/
+app-server-control/
+captures/
+*.pcap
+
+# Generated binaries and local IDE files
+bin/
+obj/
+*.exe
+*.dll
+.vs/
+.idea/

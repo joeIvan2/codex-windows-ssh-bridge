@@ -6,6 +6,34 @@
 
 > **Scope:** This is community documentation, not an official OpenAI project. It is a Windows reference for SSH remote projects—not a universal solution for every non-Linux host. It does not control a Windows desktop or bypass normal Windows authorization.
 
+## 中文摘要：為什麼這個專案值得存在
+
+**這不是另一份 SSH 指令清單；它補上的是「已經以 public key 登入」與「Codex 真正在正確的 Windows 工作環境內可靠執行」之間，最常被忽略的一層。**
+
+OpenAI 的 SSH 遠端專案文件已清楚定義基線：使用具名 SSH alias、先確認可登入，並讓遠端使用者的登入 shell 能找到 Codex CLI。在 Windows 上，這些條件全部成立後仍可能失敗：帳號選錯、cmd.exe 先把 POSIX bootstrap 拆壞、互動 shell 輸出雜訊，或是為了「先連上」而不小心放寬防火牆與憑證管理。本專案把這些真實、可重現的斷點整理成可驗證的操作路徑，而不是要求使用者猜測。
+
+### 來自現場的 Windows 痛點
+
+| 現場現象 | 為什麼一般 SSH 教學不夠 | 本專案的處理方式 |
+| --- | --- | --- |
+| 顯示 publickey 已驗證，接著卻出現 unexpected EOF、引號錯誤或亂碼 | 金鑰驗證成功不代表 Windows 的預設命令直譯器能正確傳遞 POSIX 多行 bootstrap | 分開驗證金鑰、登入 shell、內層 shell 與乾淨 stdio，並把 bridge 視為進階、可審查的替代方案 |
+| 連上同一台電腦，卻看不到預期專案、Codex 狀態或桌面帳號資料 | SSH 的 User 決定的是 Windows profile，不是單純的主機名稱 | 先鎖定「目標桌面帳號」，以一個具名 alias 對應一個帳號，保留舊 alias 作為 recovery path |
+| codex --version 通過，但 Desktop 仍卡住或 socket hangup | 版本檢查無法證明 app-server bootstrap、SHELL 與 protocol stdio 全部正確 | 使用分層 preflight 與無原始協定內容的診斷原則，先查活著的程序與 socket，不盲目刪除 |
+| 為了排錯而加入 echo、shell profile、代理日誌或關閉防火牆 | 對 app-server 而言，stdout/stderr 本身就是協定通道；快速修法可能使問題更糟，也會暴露資料 | 明確禁止 raw protocol logging、密碼、私鑰與公開 app-server endpoint；網路僅限 LAN、VPN 或 mesh |
+
+### 這個專案的價值，不只是「讓它連上」
+
+- **以 Windows profile 為中心：** 先確認真正擁有專案、工具與 Codex 登入狀態的桌面帳號，再建立 SSH 對應；這避免了「其實連到另一個帳號」的隱性失敗。
+- **以安全為預設：** 保留 recovery key、使用 least-privilege 帳號、限制網路暴露、驗證 host fingerprint，且不把密碼、私鑰、token、真實主機資料或 raw session log 放進文件與設定。
+- **以可驗證性取代猜測：** 每個步驟都有可觀察的成功條件；publickey 成功、codex --version 成功、bootstrap 成功是不同的驗證層次。
+- **以透明實作取代黑盒工具：** reference bridge 是 source-only、可審查、沒有預編譯執行檔，也不會自動改寫 SSH 設定。它保留 SSH 的原始 stdin/stdout/stderr，而不是把協定資料重新序列化。
+
+### 長期方向：把新的相容性問題轉成可重現的改善
+
+這是一個由真實 Windows SSH/Codex 排錯經驗推動的開源文件專案。遇到新的失敗模式時，目標不是用一次性的機器設定把它藏起來，而是把它整理為「症狀 → 安全檢查 → 根因邊界 → 可回復的修正」。這讓後來的 Windows 使用者少走彎路，也讓維護者能在不犧牲憑證與網路安全的前提下逐步提高相容性。
+
+**給快速審查者的英文摘要：** This project turns real Windows SSH/Codex failure modes into a privacy-preserving, reproducible, security-first guide. It focuses on the gap between successful key authentication and a reliable remote Codex project, while keeping account boundaries, recovery access, and protocol integrity explicit.
+
 ## What this is—and is not
 
 | Feature | Covered here? | Meaning |

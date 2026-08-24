@@ -1,6 +1,6 @@
 # Codex Remote Projects on Windows over SSH
 
-> **求職作品｜Windows OpenSSH × Codex 遠端專案 × Shell Boundary × Secure Remote Engineering**
+> **Windows OpenSSH × Codex 遠端專案 × Shell Boundary × Secure Remote Engineering**
 
 > A community guide for connecting the ChatGPT desktop app to a project on a remote Windows host through SSH—without exposing Codex app-server traffic to the public internet.
 
@@ -9,16 +9,16 @@
 > **Scope:** This is community documentation, not an official OpenAI project. It is a Windows reference for SSH remote projects—not a universal solution for every non-Linux host. It does not control a Windows desktop or bypass normal Windows authorization.
 
 > [!IMPORTANT]
-> **作品背景：** 這不是「把兩台電腦連起來」的單點設定，而是從真實的 Windows SSH／Codex 遠端專案失敗中，找出「金鑰已登入」與「遠端工作環境真的可用」之間的工程斷層。這個專案聚焦非 Linux 主機常被忽略的交叉問題：Windows profile、OpenSSH、POSIX shell bootstrap、app-server protocol 與安全邊界必須同時成立。
+> **專案背景：** 這不是「把兩台電腦連起來」的單點設定，而是從真實的 Windows SSH／Codex 遠端專案失敗中，找出「金鑰已登入」與「遠端工作環境真的可用」之間的工程斷層。這個專案聚焦非 Linux 主機常被忽略的交叉問題：Windows profile、OpenSSH、POSIX shell bootstrap、app-server protocol 與安全邊界必須同時成立。
 
 > [!WARNING]
 > **研究與相容性邊界：** 這是社群維護的參考與 source-only bridge，不是 OpenAI 官方相容性保證，也不是可直接部署到所有 Windows 環境的產品。部署前仍需要在隔離主機驗證、保留 recovery path，且不得把密碼、私鑰、token 或原始協定內容寫進 repo 或 log。
 
-## 求職作品重點：從真實斷點到可驗證的工程方法
+## 專案設計摘要：從真實斷點到可驗證的工程方法
 
 我沒有把這題當成「SSH 能通就結束」。真正的問題是：**當 Windows 顯示 publickey 已驗證時，怎麼證明 Codex 會在正確帳號、正確 shell、正確協定邊界內可靠執行？**
 
-| 我看到的困難 | 工程決策 | 展示的技術能力 |
+| 我看到的困難 | 工程決策 | 工程能力與設計判斷 |
 | --- | --- | --- |
 | 金鑰驗證成功後仍出現 unexpected EOF、引號錯誤或亂碼 | 將金鑰、登入 shell、內層 shell 與 stdio 拆成獨立驗證層；把 bridge 限定為受審查的進階替代方案 | Windows OpenSSH、shell parsing、跨平台 runtime 診斷 |
 | 同一台 Windows 主機卻看不到預期專案、Codex 狀態或桌面資料 | 把一個具名 SSH alias 對應到一個明確 Windows profile，先確認帳號再處理工具與專案 | 帳號邊界、profile state、可回復的系統整合 |
@@ -61,7 +61,7 @@ OpenAI 的 SSH 遠端專案文件已清楚定義基線：使用具名 SSH alias�
 
 這是一個由真實 Windows SSH/Codex 排錯經驗推動的開源文件專案。遇到新的失敗模式時，目標不是用一次性的機器設定把它藏起來，而是把它整理為「症狀 → 安全檢查 → 根因邊界 → 可回復的修正」。這讓後來的 Windows 使用者少走彎路，也讓維護者能在不犧牲憑證與網路安全的前提下逐步提高相容性。
 
-**給快速審查者的英文摘要：** This project turns real Windows SSH/Codex failure modes into a privacy-preserving, reproducible, security-first guide. It focuses on the gap between successful key authentication and a reliable remote Codex project, while keeping account boundaries, recovery access, and protocol integrity explicit.
+**英文快速摘要：** This project turns real Windows SSH/Codex failure modes into a privacy-preserving, reproducible, security-first guide. It focuses on the gap between successful key authentication and a reliable remote Codex project, while keeping account boundaries, recovery access, and protocol integrity explicit.
 
 ## What this is—and is not
 

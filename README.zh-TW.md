@@ -1,6 +1,6 @@
 # 透過 SSH 在 Windows 使用 Codex 遠端專案
 
-> **求職作品｜Windows OpenSSH × Codex 遠端專案 × Shell Boundary × Secure Remote Engineering**
+> **Windows OpenSSH × Codex 遠端專案 × Shell Boundary × Secure Remote Engineering**
 
 > 這是社群文件：讓 ChatGPT Desktop 透過 SSH 連到另一台 Windows 主機上的專案，且不把 Codex app-server 流量公開到網際網路。
 
@@ -9,16 +9,16 @@
 > **範圍：** 這不是 OpenAI 官方專案。本文件是 Windows SSH 遠端專案的參考，不保證適用於每一種非 Linux 主機；它不是遠端桌面控制工具，也不會繞過既有的 Windows 授權機制。
 
 > [!IMPORTANT]
-> **作品背景：** 這不是「把兩台電腦連起來」的單點設定，而是從真實的 Windows SSH／Codex 遠端專案失敗中，找出「金鑰已登入」與「遠端工作環境真的可用」之間的工程斷層。這個專案聚焦非 Linux 主機常被忽略的交叉問題：Windows profile、OpenSSH、POSIX shell bootstrap、app-server protocol 與安全邊界必須同時成立。
+> **專案背景：** 這不是「把兩台電腦連起來」的單點設定，而是從真實的 Windows SSH／Codex 遠端專案失敗中，找出「金鑰已登入」與「遠端工作環境真的可用」之間的工程斷層。這個專案聚焦非 Linux 主機常被忽略的交叉問題：Windows profile、OpenSSH、POSIX shell bootstrap、app-server protocol 與安全邊界必須同時成立。
 
 > [!WARNING]
 > **研究與相容性邊界：** 這是社群維護的參考與 source-only bridge，不是 OpenAI 官方相容性保證，也不是可直接部署到所有 Windows 環境的產品。部署前仍需要在隔離主機驗證、保留 recovery path，且不得把密碼、私鑰、token 或原始協定內容寫進 repo 或 log。
 
-## 求職作品重點：從真實斷點到可驗證的工程方法
+## 專案設計摘要：從真實斷點到可驗證的工程方法
 
 我沒有把這題當成「SSH 能通就結束」。真正的問題是：**當 Windows 顯示 publickey 已驗證時，怎麼證明 Codex 會在正確帳號、正確 shell、正確協定邊界內可靠執行？**
 
-| 我看到的困難 | 工程決策 | 展示的技術能力 |
+| 我看到的困難 | 工程決策 | 工程能力與設計判斷 |
 | --- | --- | --- |
 | 金鑰驗證成功後仍出現 unexpected EOF、引號錯誤或亂碼 | 將金鑰、登入 shell、內層 shell 與 stdio 拆成獨立驗證層；把 bridge 限定為受審查的進階替代方案 | Windows OpenSSH、shell parsing、跨平台 runtime 診斷 |
 | 同一台 Windows 主機卻看不到預期專案、Codex 狀態或桌面資料 | 把一個具名 SSH alias 對應到一個明確 Windows profile，先確認帳號再處理工具與專案 | 帳號邊界、profile state、可回復的系統整合 |

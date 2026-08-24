@@ -1,10 +1,39 @@
 # Codex Remote Projects on Windows over SSH
 
+> **求職作品｜Windows OpenSSH × Codex 遠端專案 × Shell Boundary × Secure Remote Engineering**
+
 > A community guide for connecting the ChatGPT desktop app to a project on a remote Windows host through SSH—without exposing Codex app-server traffic to the public internet.
 
-[繁體中文](README.zh-TW.md)
+[繁體中文｜完整技術文件](README.zh-TW.md)
 
 > **Scope:** This is community documentation, not an official OpenAI project. It is a Windows reference for SSH remote projects—not a universal solution for every non-Linux host. It does not control a Windows desktop or bypass normal Windows authorization.
+
+> [!IMPORTANT]
+> **作品背景：** 這不是「把兩台電腦連起來」的單點設定，而是從真實的 Windows SSH／Codex 遠端專案失敗中，找出「金鑰已登入」與「遠端工作環境真的可用」之間的工程斷層。這個專案聚焦非 Linux 主機常被忽略的交叉問題：Windows profile、OpenSSH、POSIX shell bootstrap、app-server protocol 與安全邊界必須同時成立。
+
+> [!WARNING]
+> **研究與相容性邊界：** 這是社群維護的參考與 source-only bridge，不是 OpenAI 官方相容性保證，也不是可直接部署到所有 Windows 環境的產品。部署前仍需要在隔離主機驗證、保留 recovery path，且不得把密碼、私鑰、token 或原始協定內容寫進 repo 或 log。
+
+## 求職作品重點：從真實斷點到可驗證的工程方法
+
+我沒有把這題當成「SSH 能通就結束」。真正的問題是：**當 Windows 顯示 publickey 已驗證時，怎麼證明 Codex 會在正確帳號、正確 shell、正確協定邊界內可靠執行？**
+
+| 我看到的困難 | 工程決策 | 展示的技術能力 |
+| --- | --- | --- |
+| 金鑰驗證成功後仍出現 unexpected EOF、引號錯誤或亂碼 | 將金鑰、登入 shell、內層 shell 與 stdio 拆成獨立驗證層；把 bridge 限定為受審查的進階替代方案 | Windows OpenSSH、shell parsing、跨平台 runtime 診斷 |
+| 同一台 Windows 主機卻看不到預期專案、Codex 狀態或桌面資料 | 把一個具名 SSH alias 對應到一個明確 Windows profile，先確認帳號再處理工具與專案 | 帳號邊界、profile state、可回復的系統整合 |
+| 只跑 codex --version 不足以保證 Desktop 能啟動遠端工作階段 | 建立從 alias、key-only login、shell PATH、bootstrap 到 app-server 的分層 preflight | 可觀察性、故障隔離、可重現驗證 |
+| 排錯時很容易加入 echo、profile banner 或 raw log，反而破壞 protocol | 將 stdin/stdout/stderr 視為協定邊界；診斷只保留去識別化 metadata，不記錄原始命令或 session stream | Protocol integrity、資安設計、最小化記錄 |
+| 快速修法常是共用帳號、放寬 firewall 或關掉密碼策略 | 先保留 recovery key、採 least privilege、核對 host fingerprint，並限制 LAN/VPN/mesh 暴露 | 威脅模型、Windows ACL／Firewall、可回復部署 |
+
+## 技術專業摘要
+
+- **Windows 與 OpenSSH：** public-key enrollment、administrators authorized-keys 特例、NTFS ACL、Windows Firewall、服務／登入帳號邊界。
+- **Shell 與協定：** POSIX bootstrap 在 Windows command interpreter 的傳遞問題、登入 shell 的 PATH、SHELL 狀態與互動雜訊。
+- **透明 bridge 設計：** source-only reference、保留原始 stdin/stdout/stderr、避免重新序列化 protocol，也不發布未審查的二進位檔。
+- **安全與可回復性：** recovery key、獨立 alias、least-privilege 帳號、host-key verification、LAN/VPN/mesh 範圍與不公開 app-server。
+- **文件化與維護：** 把一次排錯整理成「症狀 → 安全檢查 → 根因邊界 → 可回復修正」，讓後續 Windows 使用者可以重現、審查與改善。
+
 
 ## 中文摘要：為什麼這個專案值得存在
 
